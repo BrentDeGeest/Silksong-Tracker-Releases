@@ -1,0 +1,15 @@
+{
+  "name": "Silksong Map Tracker (unofficial fan app)",
+  "short_name": "Silksong Map",
+  "description": "An unofficial, free companion map for Hollow Knight: Silksong: every item, boss and shortcut, directions, guides and builds. Works offline.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#120c0d",
+  "theme_color": "#120c0d",
+  "icons": [
+    { "src": "img/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "img/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

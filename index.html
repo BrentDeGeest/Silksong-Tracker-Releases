@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Silksong Map Tracker</title>
+<link rel="stylesheet" href="css/app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#120c0d">
+<meta name="description" content="Unofficial free fan map for Hollow Knight: Silksong: every item, boss and shortcut, directions, guides and builds.">
+<link rel="icon" href="img/icons/icon-192.png"><link rel="apple-touch-icon" href="img/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+</head><body>
+<div id="boot" role="status" aria-live="polite">
+ <svg class="bmark" viewBox="0 0 96 96" aria-hidden="true">
+  <circle cx="48" cy="48" r="44" fill="none" stroke="#3a322d" stroke-width="2"/>
+  <path class="th" d="M20 70 C 34 40, 56 74, 70 34 S 82 20, 78 18" fill="none" stroke="#c92a2a" stroke-width="3.5" stroke-linecap="round"/>
+  <g transform="translate(66 22) rotate(40)"><path d="M0 -15 L3 8 L0 15 L-3 8 Z" fill="#efe8df"/><ellipse cx="0" cy="-9" rx="1.2" ry="3" fill="#14110f"/></g>
+ </svg>
+ <h1>Silksong Map Tracker</h1>
+ <p class="bsub">Companion</p>
+ <div class="btrack" aria-hidden="true"><div class="bfill" id="bfill"></div></div>
+ <div class="bmsg" id="bmsg">Loading the map…</div>
+ <div class="bmenu" id="bmenu"></div>
+ <div class="bver" id="bver"></div>
+</div>
+<div id="upd" role="dialog" aria-modal="true" aria-labelledby="updt"><div class="ubox" id="ubox"></div></div>
+<script>
+/* ===== Startup + update check =====
+   Releases are automatic: every push to main makes the GitHub workflow set
+   APP_VERSION to the next number, build the APK and publish it as a new release
+   (V3, V4, ...) on github.com/BrentDeGeest/Silksong-Tracker-Releases.
+   No need to edit APP_VERSION by hand.
+   Phones on an older version offer the update on their next start. */
+const APP_VERSION="37";
+const UPDATE_REPO="BrentDeGeest/Silksong-Tracker-Releases";
+// The ❤️ Support button (main menu, Options, Helper). Empty = no button anywhere. Everything in the app stays free.
+const DONATE_URL="";
+function openDonate(){if(DONATE_URL)window.open(DONATE_URL,"_blank","noopener")}
+// Website version: work offline and install to the home screen (not in the Android app, not when opened from disk)
+if("serviceWorker" in navigator&&/^https?:$/.test(location.protocol)&&!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()))
+ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+// The look (Silksong by default) and the particle effects, set before anything is drawn.
+// fxMount() fills a box with drifting particles: silk threads fall, souls and spores rise. Also used for the map.
+function fxMount(box,n){if(!box)return;const old=box.querySelector(":scope>.fxl");if(old)old.remove();
+ const look=document.documentElement.dataset.look;if(!look||look==="classic"||document.documentElement.dataset.fx==="0")return;
+ const L=document.createElement("div");L.className="fxl "+look;L.setAttribute("aria-hidden","true");const R=(a,b)=>a+Math.random()*(b-a);let h="";
+ for(let i=0;i<n;i++){const thread=look==="silk"&&i%3!==2,c=i%4===3?"var(--fxc2)":"var(--fxc)";
+  h+=`<i class="${thread?"t":""}" style="--x:${R(0,100).toFixed(1)}%;--s:${R(2,look==="hk"?5:4).toFixed(1)}px;--h:${R(40,120).toFixed(0)}px;--c:${c};--o:${R(.35,.85).toFixed(2)};--d:${R(thread?9:11,thread?17:22).toFixed(1)}s;--dl:-${R(0,20).toFixed(1)}s;--dx:${R(-60,60).toFixed(0)}px;--r:${R(-14,14).toFixed(0)}deg"></i>`}
+ L.innerHTML=h;box.insertBefore(L,box.firstChild)}
+(function(){let z={};try{z=(JSON.parse(localStorage.getItem("ss5")||"{}").set)||{}}catch(e){}
+ const d=document.documentElement;d.dataset.look=z.look||"silk";d.dataset.fx=z.fx===0?"0":"1";
+ if(matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches)d.dataset.fx="0";fxMount(document.getElementById("boot"),26)})();
+const BOOT=(function(){
+ const $=id=>document.getElementById(id),fill=$("bfill"),msg=$("bmsg"),t0=Date.now();
+ const native=!!(window.Capacitor&&typeof Capacitor.isNativePlatform==="function"&&Capacitor.isNativePlatform());
+ $("bver").textContent="Version "+APP_VERSION;
+ let pct=0,appReady=false,upd=null,checkDone=!native,paused=false,finished=false;
+ function bar(p,m){pct=Math.max(pct,p);fill.style.width=pct+"%";if(m)msg.textContent=m}
+ bar(12);
+ // creep forward while the page parses so it never looks frozen
+ const creep=setInterval(()=>{if(!paused&&pct<(appReady?88:60))bar(pct+2)},120);
+
+ function parts(v){return String(v||"").replace(/^[^\d]*/,"").split(/[^\d]+/).filter(Boolean).map(Number)}
+ function newer(a,b){const x=parts(a),y=parts(b);for(let i=0;i<Math.max(x.length,y.length);i++){const p=x[i]||0,q=y[i]||0;if(p!==q)return p>q}return false}
+
+ // Only the Android app checks for updates; the web version is always current.
+ if(native){
+  const ctl=typeof AbortController!=="undefined"?new AbortController():null;
+  const to=setTimeout(()=>{ctl&&ctl.abort();done(null)},6000);
+  function done(r){if(checkDone)return;checkDone=true;clearTimeout(to);upd=r;next()}
+  fetch("https://api.github.com/repos/"+UPDATE_REPO+"/releases/latest",{headers:{Accept:"application/vnd.github+json"},cache:"no-store",signal:ctl?ctl.signal:undefined})
+   .then(r=>r.ok?r.json():null)
+   .then(j=>{
+    if(!j||!j.tag_name||!newer(j.tag_name,APP_VERSION))return done(null);
+    const apk=(j.assets||[]).find(a=>/\.apk$/i.test(a.name));
+    done({ver:parts(j.tag_name).join("."),notes:(j.body||"").trim(),shots:shotsOf(j),
+     url:apk?apk.browser_download_url:"https://github.com/"+UPDATE_REPO+"/releases/latest/download/app-debug.apk"});
+   })
+   .catch(()=>done(null));
+  bar(20,"Checking for updates…");
+ }
+
+ function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+ // Screenshots are image files attached to the release; their label (or file name) is the caption.
+ function shotsOf(j){return (j.assets||[]).filter(a=>/\.(png|jpe?g|webp)$/i.test(a.name)).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}))
+  .map(a=>({url:a.browser_download_url,cap:a.label||a.name.replace(/\.[^.]+$/,"").replace(/^\d+[\s._-]*/,"").replace(/[_-]+/g," ")}))}
+ // Release notes: the first line is the title (an emoji at its start becomes the big icon),
+ // lines starting with "-" are short points, everything else is a sentence of explanation.
+ function readNotes(t){const L=String(t||"").replace(/\r/g,"").split("\n").map(x=>x.trim()).filter(x=>x&&!/^!\[/.test(x));
+  const clean=x=>x.replace(/^#+\s*/,"").replace(/[*_`>]/g,"");let title=clean(L.shift()||""),icon="";
+  const m=title.match(/^(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*)\s*/u);if(m){icon=m[1];title=title.slice(m[0].length)}
+  if(title.length>70){const re=/[.!?](\s|$)/g;let mm;while((mm=re.exec(title))&&mm.index<10);if(mm&&mm.index<100){const k=mm.index;L.unshift(title.slice(k+1).trim());title=title.slice(0,k+(title[k]==="!"?1:0))}
+   else{const k=title.indexOf(", ",25);if(k>0&&k<95){L.unshift(title.slice(k+2).replace(/^./,x=>x.toUpperCase()));title=title.slice(0,k)}}}
+  const pts=[],txt=[];L.forEach(x=>{if(/^[-•*]\s+/.test(x))pts.push(clean(x.replace(/^[-•*]\s+/,"")));else txt.push(clean(x))});
+  return{icon,title,pts:pts.slice(0,6),txt:txt.join(" ").slice(0,420)}}
+ function card(u,head,sub,bodyOnly){const n=readNotes(u.notes),sh=u.shots||[];
+  return (bodyOnly?"":`<div class="uhero"><span class="uchip">${esc(head)}</span><div class="uic">${n.icon||"✨"}</div><h2 id="updt">${esc(n.title||"A new update is here")}</h2>${sub?`<p class="uv">${sub}</p>`:""}</div>`)+`
+   ${sh.length?`<div class="ushots" role="list">${sh.map((s,i)=>`<figure role="listitem"><button class="ushot" data-u="${esc(s.url)}" data-c="${esc(s.cap)}" aria-label="Show this picture bigger: ${esc(s.cap)}"><img src="${esc(s.url)}" alt="${esc(s.cap)}" loading="lazy" onerror="this.closest('figure').remove()"></button><figcaption>${esc(s.cap)}</figcaption></figure>`).join("")}</div>${sh.length>1?'<p class="uswipe">Swipe for more pictures →</p>':''}`:""}
+   ${n.txt?`<p class="utxt">${esc(n.txt)}</p>`:""}${n.pts.length?`<ul class="upts">${n.pts.map(p=>`<li>${esc(p)}</li>`).join("")}</ul>`:""}`}
+ // tap a screenshot to see it on the whole screen
+ document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest(".ushot");if(!b)return;
+  const z=document.createElement("div");z.className="uzoom";z.innerHTML=`<img src="${esc(b.dataset.u)}" alt=""><p>${esc(b.dataset.c)}</p><small>Tap anywhere to close</small>`;z.onclick=()=>z.remove();document.body.appendChild(z)});
+ function showUpdate(u){
+  paused=true;msg.textContent="Update available";
+  $("ubox").innerHTML=card(u,"New update · Version "+u.ver,"You have version "+esc(APP_VERSION)+". Updating keeps all your progress.")+
+   `<div class="ubtns"><button class="upri" id="udl">⬇️ Get the update</button><button id="ulater">Later</button></div>`;
+  $("upd").classList.add("on");
+  $("udl").onclick=()=>download(u);$("ulater").onclick=skip;
+  setTimeout(()=>{$("udl").focus({preventScroll:true});$("ubox").scrollTop=0},50);
+ }
+ // ===== Getting the update =====
+ // Inside the Android app: download the APK in the app (with progress) and open Android's own installer on it.
+ // If that is not possible (older app, no plugin, download fails), fall back to downloading it in the browser.
+ const P=n=>window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins[n];
+ const canInstall=()=>native&&!!(P("FileTransfer")&&P("Filesystem")&&P("FileOpener"));
+ let dlBusy=false,apkUri=null;
+ function dlScreen(pct,txt){$("ubox").innerHTML=`<div class="uhero"><div class="uic">⬇️</div><h2 id="updt">Downloading the update…</h2><p class="uv">${txt||"This takes a few seconds. Keep the app open."}</p></div>
+   <div class="udl"><div class="udlbar"><i style="width:${pct||0}%"></i></div><b id="udlp">${pct!=null?pct+"%":""}</b></div>`}
+ function installScreen(u){$("ubox").innerHTML=`<div class="uhero"><div class="uic">📲</div><h2 id="updt">Almost done: tap Update</h2><p class="uv">Android now asks if you want to update the app.</p></div>
+   <ol class="usteps"><li>Tap <b>Update</b>. Your progress is kept.</li><li>The very first time, Android may ask to <b>allow installs from this app</b>: switch it on, go back, and tap <b>Open the installer</b> below.</li><li>If Google Play Protect warns about an unknown app, tap <b>More details</b>, then <b>Update anyway</b>. It does that for every app that is not from the Play Store.</li></ol>
+   <div class="ubtns"><button class="upri" id="uopen">📲 Open the installer</button><button id="ubrowser">Download in the browser instead</button><button id="ulater">Later</button></div>`;
+  $("uopen").onclick=()=>openApk(u);$("ubrowser").onclick=()=>browserDl(u);$("ulater").onclick=skip}
+ function openApk(u){P("FileOpener").open({filePath:apkUri,contentType:"application/vnd.android.package-archive",openWithDefault:true}).catch(()=>browserDl(u,"The installer did not open, so here is the other way."))}
+ async function download(u){
+  if(!canInstall())return browserDl(u);
+  if(dlBusy)return;dlBusy=true;dlScreen(0);let h=null;
+  try{
+   const f=await P("Filesystem").getUri({path:"silksong-update.apk",directory:"CACHE"});apkUri=f.uri;
+   try{h=await P("FileTransfer").addListener("progress",p=>{if(!p||!p.contentLength)return;const v=Math.min(100,Math.round(p.bytes/p.contentLength*100));const b=document.querySelector("#upd .udlbar i");if(b){b.style.width=v+"%";$("udlp").textContent=v+"%"}})}catch(e){}
+   await P("FileTransfer").downloadFile({url:u.url,path:apkUri,progress:true});
+   dlBusy=false;if(h&&h.remove)h.remove();installScreen(u);openApk(u);
+  }catch(e){dlBusy=false;if(h&&h.remove)h.remove();browserDl(u,"The download inside the app did not work, so here is the other way.")}
+ }
+ function browserDl(u,why){
+  // Hand the link to Android so the browser downloads the APK.
+  const B=P("Browser");
+  if(B&&B.open)B.open({url:u.url}).catch(()=>{location.href=u.url});
+  else location.href=u.url;
+  $("ubox").innerHTML=`<div class="uhero"><div class="uic">⬇️</div><h2 id="updt">Downloading in your browser…</h2>${why?`<p class="uv">${esc(why)}</p>`:""}</div>
+   <ol class="usteps"><li>Wait for the download to finish.</li><li>Tap the downloaded file (or open it from your notifications).</li><li>If Android asks, allow installing apps from your browser, then tap <b>Update</b>.</li></ol>
+   <p class="uv" style="margin-top:10px">Says “App not installed”? Copy your backup code first (More → Your progress), uninstall the old app, install the new one and restore the code.</p>
+   <div class="ubtns"><button class="upri" id="uagain">Download again</button><button id="ulater">Continue to the map</button></div>`;
+  $("uagain").onclick=()=>browserDl(u);$("ulater").onclick=skip;
+ }
+ // "Check for updates" from Settings or the Helper, without restarting the app
+ function latest(){return fetch("https://api.github.com/repos/"+UPDATE_REPO+"/releases/latest",{headers:{Accept:"application/vnd.github+json"},cache:"no-store"}).then(r=>r.ok?r.json():null).then(j=>{
+   if(!j||!j.tag_name)return{err:1};if(!newer(j.tag_name,APP_VERSION))return{none:1,ver:parts(j.tag_name).join(".")};
+   const apk=(j.assets||[]).find(a=>/\.apk$/i.test(a.name));
+   return{ver:parts(j.tag_name).join("."),notes:(j.body||"").trim(),shots:shotsOf(j),url:apk?apk.browser_download_url:"https://github.com/"+UPDATE_REPO+"/releases/latest/download/app-debug.apk"}}).catch(()=>({err:1}))}
+ function msgBox(icon,title,text){$("ubox").innerHTML=`<div class="uhero"><div class="uic">${icon}</div><h2 id="updt">${title}</h2><p class="uv">${text}</p></div><div class="ubtns"><button class="upri" id="uok">OK</button></div>`;$("upd").classList.add("on");$("uok").onclick=()=>$("upd").classList.remove("on")}
+ function checkUpdate(){
+  if(!native)return msgBox("✅","You're up to date","The web version always runs the newest version: "+esc(APP_VERSION)+".");
+  msgBox("🔄","Checking for updates…","One moment.");
+  return latest().then(u=>{if(u.err)msgBox("📶","Could not check right now","Check your internet connection and try again. You have version "+esc(APP_VERSION)+".");
+   else if(u.none)msgBox("✅","You're up to date","You have the newest version: "+esc(APP_VERSION)+".");
+   else{$("ubox").innerHTML=card(u,"New update · Version "+u.ver,"You have version "+esc(APP_VERSION)+". Updating keeps all your progress.")+`<div class="ubtns"><button class="upri" id="udl">⬇️ Get the update</button><button id="ulater">Later</button></div>`;
+    $("upd").classList.add("on");$("udl").onclick=()=>download(u);$("ulater").onclick=()=>$("upd").classList.remove("on")}})}
+ function skip(){$("upd").classList.remove("on");if(!paused)return;paused=false;upd=null;next()}
+ // ===== Update log: every version with its notes and pictures (saved, so it also opens offline) =====
+ const relSrc=()=>{try{return JSON.parse(localStorage.getItem("ssrel")||"null")}catch(e){return null}};
+ function fetchLog(){return fetch("https://api.github.com/repos/"+UPDATE_REPO+"/releases?per_page=60",{headers:{Accept:"application/vnd.github+json"},cache:"no-store"})
+  .then(r=>r.ok?r.json():null).then(a=>{if(!Array.isArray(a))return null;const L=a.filter(j=>!j.draft&&/^V\d/.test(j.tag_name)).sort((x,y)=>newer(x.tag_name,y.tag_name)?-1:1).map(j=>({ver:parts(j.tag_name).join("."),date:(j.published_at||"").slice(0,10),notes:(j.body||"").trim(),shots:shotsOf(j)}));
+   try{localStorage.setItem("ssrel",JSON.stringify(L))}catch(e){}return L}).catch(()=>null)}
+ let logOpen=-1;
+ function drawLog(L,state){const box=$("ubox");const cur=APP_VERSION;
+  const fmt=d=>{try{return new Date(d+"T12:00:00").toLocaleDateString(undefined,{day:"numeric",month:"long",year:"numeric"})}catch(e){return d}};
+  box.innerHTML=`<div class="uhero"><span class="uchip">Version ${esc(cur)}</span><div class="uic">📜</div><h2 id="updt">Update log</h2><p class="uv">Everything that changed, newest first. Tap a version to see more.</p></div>`+
+   (L&&L.length?`<div class="ulog">${L.map((r,i)=>{const n=readNotes(r.notes);return `<div class="ulr${i===logOpen?" open":""}"><button class="ulh" data-i="${i}" aria-expanded="${i===logOpen}"><span class="ulic">${n.icon||"✨"}</span><span class="ult"><b>${esc(n.title||"Bug fixes and improvements")}</b><small>Version ${esc(r.ver)}${r.date?" · "+esc(fmt(r.date)):""}${r.ver===cur?" · ✓ You have this one":""}${r.shots.length?" · 🖼 "+r.shots.length:""}</small></span><i aria-hidden="true">${i===logOpen?"▾":"▸"}</i></button>${i===logOpen?`<div class="ulb">${card(r,"","",1).trim()||'<p class="utxt">That is all for this version.</p>'}</div>`:""}</div>`}).join("")}</div>`
+    :`<p class="utxt">${state==="loading"?"Loading the update log…":"The update log needs an internet connection the first time. Try again when you are online."}</p>`)+
+   `<div class="ubtns"><button class="upri" id="ulback">Back</button></div>`;
+  box.querySelectorAll(".ulh").forEach(b=>b.onclick=()=>{const i=+b.dataset.i;logOpen=logOpen===i?-1:i;drawLog(L);const r=box.querySelector(".ulr.open");if(r)r.scrollIntoView({block:"nearest"})});
+  $("ulback").onclick=()=>{$("upd").classList.remove("on");logOpen=-1}}
+ function openLog(){const saved=relSrc();$("upd").classList.add("on");drawLog(saved,saved?"":"loading");
+  fetchLog().then(L=>{if(L&&$("upd").classList.contains("on")&&$("ulback"))drawLog(L);else if(!L&&!saved&&$("ulback"))drawLog(null)})}
+ // First start after an update: show once what this version brought (not on a fresh install).
+ function whatsNew(){let last=null;try{last=localStorage.getItem("sslastv");localStorage.setItem("sslastv",APP_VERSION)}catch(e){return}
+  if(!last||last===APP_VERSION||!newer(APP_VERSION,last)||!navigator.onLine)return;
+  fetch("https://api.github.com/repos/"+UPDATE_REPO+"/releases/tags/V"+APP_VERSION,{headers:{Accept:"application/vnd.github+json"}}).then(r=>r.ok?r.json():null).then(j=>{
+   if(!j||!(j.body||"").trim())return;const u={ver:APP_VERSION,notes:j.body,shots:shotsOf(j)};
+   $("ubox").innerHTML=card(u,"What's new · Version "+APP_VERSION,"You just updated. This is what you got:")+`<div class="ubtns"><button class="upri" id="uok">Let's go!</button></div>`;
+   $("upd").classList.add("on");$("uok").onclick=()=>$("upd").classList.remove("on")}).catch(()=>{})}
+ // ===== Main menu: the newest update in the middle, every version in a list on the side, Start / Options / Quit =====
+ const quitOK=()=>native&&!!(window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App&&Capacitor.Plugins.App.exitApp);
+ const menuOff=()=>{try{const s=JSON.parse(localStorage.getItem("ss5")||"{}");return !!(s.set&&s.set.startmenu===0)}catch(e){return false}};
+ let menuSel=null,menuPicked=false,menuAfter=null,menuWhatsNew=true;
+ function start(){const b=$("boot");if(!b||b.classList.contains("gone"))return;b.classList.add("gone");setTimeout(()=>b.remove(),400);if(!menuWhatsNew)setTimeout(whatsNew,500);else{try{localStorage.setItem("sslastv",APP_VERSION)}catch(e){}}}
+ function drawMenu(L){const box=$("bmenu");if(!box)return;const cur=APP_VERSION;
+  if(!L||!L.length)L=[{ver:cur,date:"",notes:"Silksong Map Tracker\nThe update list needs an internet connection the first time you open the app.",shots:[]}];
+  if(!L.some(r=>r.ver===cur))L=L.concat([{ver:cur,date:"",notes:"Your version",shots:[]}]).sort((a,b)=>newer(a.ver,b.ver)?-1:1);
+  if(!menuPicked||!L.some(r=>r.ver===menuSel))menuSel=menuAfter&&L.some(r=>r.ver===menuAfter)?menuAfter:L[0].ver;const r=L.find(x=>x.ver===menuSel);
+  const fmt=d=>{try{return d?new Date(d+"T12:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}):""}catch(e){return d}};
+  const isNew=r.ver===L[0].ver,mine=r.ver===cur,ahead=newer(r.ver,cur);
+  box.innerHTML=`<aside class="mlist" aria-label="All versions"><b class="mlh">Versions</b><div class="mscroll" id="mscroll">${L.map((x,i)=>{const n=readNotes(x.notes);
+    return `<button class="mvr${x.ver===menuSel?" on":""}${x.ver===cur?" cur":""}" data-v="${esc(x.ver)}" aria-pressed="${x.ver===menuSel}"><span class="mvn">${n.icon||"✨"} V${esc(x.ver)}${i===0?' <i>NEW</i>':''}</span><span class="mvt">${esc(n.title||"Bug fixes")}</span><small>${x.ver===cur?"✓ You have this":esc(fmt(x.date))}</small></button>`}).join("")}</div></aside>
+   <section class="mmain" id="mmain">${card(r,(isNew?"Newest · ":"")+"Version "+r.ver,ahead?"Newer than yours (you have version "+esc(cur)+")":mine?"This is the version you have":fmt(r.date)?"Released "+esc(fmt(r.date)):"")}</section>
+   <nav class="mbtns"><button class="mstart" id="bstart">▶ Start</button><button id="bopt">⚙️ Options</button>${DONATE_URL?'<button id="bdon" class="mdon" aria-label="Support the app">❤️</button>':''}${quitOK()?'<button id="bquit">✕ Quit</button>':''}</nav>`;
+  box.querySelectorAll(".mvr").forEach(b=>b.onclick=()=>{menuSel=b.dataset.v;menuPicked=true;const sc=$("mscroll").scrollTop;drawMenu(L);$("mscroll").scrollTop=sc;$("mmain").scrollTop=0});
+  $("bstart").onclick=start;
+  $("bopt").onclick=()=>{start();setTimeout(()=>{try{openSettings()}catch(e){}},450)};
+  if($("bdon"))$("bdon").onclick=openDonate;
+  if($("bquit"))$("bquit").onclick=()=>{try{Capacitor.Plugins.App.exitApp()}catch(err){}}}
+ function showMenu(){const b=$("boot");b.classList.add("menu");$("bver").textContent="Version "+APP_VERSION;
+  // the menu already shows what is new, so the separate "What's new" card is not needed
+  let last=null;try{last=localStorage.getItem("sslastv")}catch(e){}
+  if(last&&last!==APP_VERSION&&newer(APP_VERSION,last))menuAfter=APP_VERSION;
+  const saved=relSrc();drawMenu(saved);fetchLog().then(L=>{if(L&&$("bmenu")&&!b.classList.contains("gone"))drawMenu(L)});
+  document.addEventListener("keydown",function k(e){if(!$("boot")||$("upd").classList.contains("on")){return}if(e.key==="Enter"&&!(e.target.closest&&e.target.closest(".mvr"))){e.preventDefault();start();document.removeEventListener("keydown",k)}});
+  setTimeout(()=>{const s=$("bstart");if(s)s.focus({preventScroll:true})},60)}
+ function next(){
+  if(finished||paused)return;
+  if(upd&&appReady){showUpdate(upd);return}
+  if(!appReady||!checkDone)return;
+  finished=true;clearInterval(creep);bar(100,"Ready");
+  const wait=Math.max(native?700:250,(native?900:400)-(Date.now()-t0));
+  setTimeout(()=>{if(menuOff())start();else showMenu()},wait);
+ }
+ // Called once the map code has run. If something goes wrong, don't trap people on the splash.
+ function ready(){if(appReady)return;appReady=true;bar(75,checkDone?"Drawing the map…":"Checking for updates…");next()}
+ window.addEventListener("load",()=>setTimeout(ready,300));
+ setTimeout(()=>{ready();if(!checkDone){checkDone=true;next()}},12000);
+ return{ready,preview:showUpdate,card,openLog,start,checkUpdate,version:()=>APP_VERSION,isApp:()=>native};
+})();
+</script>
+
+<header>
+ <button id="menu" aria-label="Open checklist">☰</button><button id="story" aria-label="Story guide: what to do next" title="Story guide: what to do next">📜</button>
+ <div class="ht"><button id="hs" class="hs" aria-label="Search items, bosses and places"><span class="hsi">🔍</span><span class="hst">Search items, bosses, places…</span></button><div class="hp"><div class="bar"><i id="pbar"></i></div><small id="prog"></small></div></div>
+ <button id="avail"></button>
+</header>
+<div id="wrap"><svg id="map"></svg>
+ <div class="zb"><button id="zc" class="hlpb" aria-label="Helper: ask anything" title="Helper: ask anything" onclick="hOpen()">💬</button><button id="zi" aria-label="Zoom in">+</button><button id="zo" aria-label="Zoom out">−</button><button id="zh" aria-label="Bone Bottom">⌂</button><button id="za" aria-label="Whole map">⤢</button><button id="zl" aria-label="Map layers" onclick="toggleLayers()">◧</button><button id="zm" class="mkb" aria-label="Add a marker" title="Add a marker" onclick="togglePlacing()">📌</button><button class="zset" aria-label="Settings" title="Settings" onclick="openSettings()">⚙️</button></div><div class="pbar" role="status"><span>Tap the map where the marker goes</span><button onclick="setPlacing(false)">Cancel</button></div><div class="pbar hbar" role="status"><span>👆 Tap where you are</span><button onclick="cancelPickHere()">Cancel</button></div><div id="lpop" class="lpop"></div><div id="rbar" class="rbar" role="status" aria-live="polite"></div>
+</div>
+<div id="scrim"></div>
+<aside id="drw">
+ <div class="dh"><b>Tracker</b><button id="dclose" aria-label="Close">‹</button></div>
+ <div class="dsearch" role="search"><span aria-hidden="true">🔍</span><input id="q" type="search" placeholder="Search items, bosses, places…" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search" aria-label="Search"><button id="qx" aria-label="Clear search">✕</button></div>
+ <div class="tabs" role="tablist"><button data-t="story" role="tab"><i>📜</i>Guide</button><button data-t="list" role="tab"><i>✅</i>Checklist</button><button data-t="wish" role="tab"><i>🌸</i>Wishes</button><button data-t="pw" role="tab"><i>✦</i>Abilities</button><button data-t="world" role="tab"><i>🗺️</i>World</button><button data-t="more" role="tab"><i>⚙️</i>More</button></div>
+ <div class="db" id="db"></div>
+</aside>
+<div id="sheet"><div class="grab" role="button" tabindex="0" aria-label="Show more or less"></div><div id="sc"></div><button id="more" onclick="sheetFull(true)">More ︿</button></div>
+<button id="reo" aria-label="Open the panel again" onclick="reopenSheet()"><span class="ra" aria-hidden="true">︿</span><span class="rl">Show again</span></button>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="set" role="dialog" aria-modal="true" aria-labelledby="setT"><div class="shd"><button onclick="closeSettings()" aria-label="Close settings">‹</button><b id="setT">Settings</b></div><div class="sbd"><div class="sbi" id="setB"></div></div></div>
+<script src="data/areas.js"></script>
+<script src="data/groups.js"></script>
+<script src="data/items.js"></script>
+<script src="data/wishes.js"></script>
+<script src="data/story.js"></script>
+<script src="data/routes.js"></script>
+<script src="data/nav-grid.js"></script>
+<script src="data/gates.js"></script>
+<script src="data/difficulty.js"></script>
+<script src="data/pics.js"></script>
+<script src="data/missable.js"></script>
+<script src="data/builds.js"></script>
+<script src="js/pics.js"></script>
+<script src="js/report.js"></script>
+<script src="js/tips.js"></script>
+<script src="js/app.js"></script>
+<script src="js/helper.js"></script>
+<script>(function(){const i=new Image();i.onload=i.onerror=()=>BOOT.ready();i.src=IMG})()</script></body></html>
