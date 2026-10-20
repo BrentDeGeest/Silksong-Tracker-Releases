@@ -83,3 +83,6 @@ NE.push(["gm_cr","vd_in"],["vd_in","vd_p"],["vd_p","vd_c"],["vd_c","vd_w"],["vd_
 // The Abyss (no marked wiki map: spots read off the app map and the wiki's text, all approximate)
 Object.assign(NV,{"ab_bell":[2840,3165],"ab_top":[2500,3085],"ab_w":[2350,3200],"ab_bot":[2330,3375],"ab_lace":[2426,3385],"ab_wn":[2610,3259],"ab_ws":[2732,3350]});
 NE.push(["dd_db","ab_bell"],["ab_bell","ab_top"],["ab_top","ab_w"],["ab_w","ab_bot"],["ab_bot","ab_lace"],["ab_lace","ab_wn"],["ab_wn","ab_ws"]);
+// Sands of Karak east: the shaft down from the long east corridor to the coral crust before the Grand Gate (lift; spots read off the app map, approximate)
+Object.assign(NV,{"kk_lt":[1270,1404],"kk_lb":[1278,1515]});
+NE.push(["kk_e2","kk_lt"],["kk_lt","kk_ek"],["kk_lt","kk_lb"],["kk_lb","bs_gg"]);
