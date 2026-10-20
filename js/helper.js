@@ -48,6 +48,7 @@ const H_PAGES=[
  ["Restore a backup","restore import load backup paste code progress bring back get back",()=>{openDrawer("more");setTimeout(()=>{const e=document.querySelector('#rin');if(e){e.closest("details").open=true;e.scrollIntoView({block:"center"})}},60)},"Paste a backup code to bring your progress back."],
  ["Check for updates","check for updates update updates new version newer version upgrade latest version download update install update get update update app",()=>BOOT.checkUpdate(),"Looks for a newer version right now, without restarting the app."],
  ["Update log","update log changelog change log patch notes whats new what s new versions version history history news",()=>BOOT.openLog(),"Every version, with what changed and pictures."],
+ ["Trip","trip trips my trip route several stops multiple stops plan a trip next stop",()=>{closeDrawer();tripPanel()},"Several stops in one go: the whole trip on the map, numbered, with the next stop highlighted."],
  ["Report a problem","report bug problem broken wrong mistake suggest suggestion feedback idea",()=>{closeDrawer();openReport()},"Send a bug report or an idea. No account needed."],
  ["Reset","reset start over clear progress delete progress",()=>{openDrawer("more");setTimeout(()=>{const d=[...document.querySelectorAll("#db details.sect")].find(x=>/Reset/.test(x.textContent));if(d){d.open=true;d.scrollIntoView({block:"start"})}},60)},"Reset buttons, each asks first. Your markers are always kept."],
  ["How to read the map","how to read the map read map icons explained help map",()=>{openDrawer("more");setTimeout(()=>{const d=[...document.querySelectorAll("#db details.sect")].find(x=>/How to read/.test(x.textContent));if(d){d.open=true;d.scrollIntoView({block:"start"})}},60)},"A short explanation of the pins and symbols."],
@@ -180,7 +181,8 @@ function hList(label,items,how){const here=hHere();let xs=items.slice();
  h+=`<div class="hlist">${top.map(i=>{const [c,lbl]=hItemState(i);return `<div class="hrow">${hDot(c)}<span><b>${hEsc(i.n)}</b><small>${hEsc(aN(areaOf(i)))} · ${lbl}</small></span>${hBtn("📍",()=>goTo(i.id),true,"sm")}${hBtn("🧭",()=>showWay("it",i.id),true,"sm")}</div>`}).join("")}</div>`;
  if(list.length>top.length)h+=`<small>…and ${list.length-top.length} more.</small>`;
  if(top.length===1)HLP.last={kind:"it",id:top[0].id};
- return h+hBtns(how.near&&(!here||here.guess)?hBtn("📍 Tell me where I am",()=>showHerePick()):"",hBtn("✅ Open the checklist",()=>{CK=null;openDrawer("list")}))}
+ const tripIds=list.filter(i=>!S.done[i.id]&&st(i)!=="red").slice(0,8).map(i=>i.id);
+ return h+hBtns(tripIds.length>1?hBtn(`🧭 Make a trip of ${tripIds.length===list.filter(i=>!S.done[i.id]&&st(i)!=="red").length?"these":"the first "+tripIds.length}`,()=>{tripIds.forEach(id=>tripAdd("it",id,true));closeDrawer();tripPanel()}):"",how.near&&(!here||here.guess)?hBtn("📍 Tell me where I am",()=>showHerePick()):"",hBtn("✅ Open the checklist",()=>{CK=null;openDrawer("list")}))}
 
 // ---------- settings and map filters ----------
 function hSetting(key,txt){const z=SET(),off=/\b(off|disable|disabled|no|stop|remove|without|dont|hide|turn off|switch off|never)\b/.test(txt),on=/\b(on|enable|enabled|yes|start|show|turn on|switch on|want)\b/.test(txt);
@@ -224,6 +226,9 @@ function hAnswer(raw){const q0=hNorm(raw);if(!q0)return null;const q=hSyn(q0);co
   if(hq(/\b(need|needs|requirement|locked|unlock|why)\b/)&&last.kind==="it")return hAboutItem(byId(last.id),"need");
   if(hq(/\b(show|where|find|see)\b/)){const L=last;return{run:()=>L.kind==="it"?goTo(L.id):L.kind==="g"?moveToGroup(L.id):L.kind==="gate"?goToGate(L.id):L.kind==="area"?moveToArea(L.id):0,txt:"📍 Here it is on the map."}}
   if(hq(/\b(got|have|collected|found|beat|beaten|killed|done|tick)\b/)&&last.kind==="it"){const i=byId(last.id);if(!S.done[i.id])toggle(i.id);return `Ticked <b>${hEsc(i.n)}</b>.`+hBtns(hBtn("↩ Undo",()=>{toggle(i.id);hSay("Undone.")},false))}}
+ // trips
+ if(hq(/\b(my trip|the trip|show (my )?trip|trip list|next stop|where next|whats next on my trip)\b/)&&!hq(/\b(make|plan|add|clear|delete|empty)\b/))return{run:()=>{closeDrawer();tripPanel()},txt:"🧭 Here is your trip."};
+ if(hq(/\b(clear|delete|empty|stop|cancel) (my |the )?trip\b/))return{run:()=>tripClear(),txt:"🗑 Your trip is cleared."};
  // donations
  if(hq(/\b(donate|donation|donations|support (the )?(app|you|developer|dev)|tip jar|buy (you|me) a coffee|ko ?fi|patreon|pay|paypal)\b/))return DONATE_URL?`The app is free and stays free. If you want to say thanks, you can leave a small donation.`+hBtns(hBtn("❤️ Support the app",()=>openDonate(),false)):"The app is completely free. There is no donation link yet, but sending a bug report or an idea with the ⚠ button helps a lot too!";
  // updates and the version
@@ -273,7 +278,7 @@ function hAnswer(raw){const q0=hNorm(raw);if(!q0)return null;const q=hSyn(q0);co
  const wantTick=hq(/\b(i (got|have|found|beat|killed|collected|unlocked|opened|picked up|defeated)|mark (as )?(done|collected)|tick off)\b/);
  const near=hq(/\b(nearest|closest|near me|nearby|close by|closest to me)\b/);
  // strip the intent words before matching names
- let rest=q.replace(/\b(take me to|take me|bring me to|lead me to|guide me to|get me to|directions? to|route to|the way to|way to|how (do|can) i get to|navigate to|go to|travel to|walk to|what do i need for|what do i need to|what does .* need|requirements? for|how (do|can) i (get|unlock|reach|beat|open|obtain)|how to (get|unlock|reach|beat|open|obtain)|why (is|cant|can t|can not)|is|locked|i (got|have|found|beat|killed|collected|unlocked|opened|picked up|defeated)|mark (as )?(done|collected)|tick off|nearest|closest|near me|nearby|close by|where is|where are|where can i find|where do i find|wheres|find|show me|show|easiest|easy|next|all|every|remaining|missing|left|open|the)\b/g," ").replace(/\s+/g," ").trim();
+ let rest=q.replace(/\b(make a trip of|make a trip to|plan a trip to|plan a trip for|trip to|trip of|add all|take me to|take me|bring me to|lead me to|guide me to|get me to|directions? to|route to|the way to|way to|how (do|can) i get to|navigate to|go to|travel to|walk to|what do i need for|what do i need to|what does .* need|requirements? for|how (do|can) i (get|unlock|reach|beat|open|obtain)|how to (get|unlock|reach|beat|open|obtain)|why (is|cant|can t|can not)|is|locked|i (got|have|found|beat|killed|collected|unlocked|opened|picked up|defeated)|mark (as )?(done|collected)|tick off|nearest|closest|near me|nearby|close by|where is|where are|where can i find|where do i find|wheres|find|show me|show|easiest|easy|next|all|every|remaining|missing|left|open|the)\b/g," ").replace(/\s+/g," ").trim();
  // an area named in the question ("fleas in greymoor")
  let area=null;const ai=rest.match(/\b(?:in|at|around|inside)\s+(.+)$/);if(ai){const fa=hFind(ai[1],["area"]);if(fa.length&&fa[0].sc>=3){area=fa[0].id;rest=rest.slice(0,ai.index).trim()}}
  // a whole kind of thing

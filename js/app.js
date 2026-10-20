@@ -315,7 +315,7 @@ function drawOv(){
  if(FM){FM.solo=1;fp=[FM.x,FM.y];top+=iconSVG(FM,FM.x,FM.y,k,s)+`<text class="ml" style="font-size:${11*s}px" x="${FM.x}" y="${FM.y-58*s}">${esc(FM.it?FM.it.n:G[FM.grp].n)}</text>`}
  const mk=marksSVG(s,k);o+=mk.o;top+=mk.top;if(flash&&flash.key.startsWith("mk:")&&S.marks[flash.key.slice(3)]){const m=S.marks[flash.key.slice(3)];fp=[m.x,m.y-20*k]}
  if(fp)top+=`<g class="flash${flash.calm?' calm':''}" transform="translate(${fp[0]} ${fp[1]}) scale(${k})" pointer-events="none"><circle class="pl" r="16"/><circle class="pl d2" r="16"/><circle r="19" fill="none" stroke="#ffd43b" stroke-width="3"/><path class="arw" d="M0 -24 l-7 -11 h14 z" fill="#ffd43b" stroke="#000" stroke-width="1"/></g>`;
- const rt=routeSVG(s,k),OE=document.getElementById("o");OE.classList.toggle("routing",!!(R&&R.res));OE.innerHTML=rt.o+gatesSVG(s,k)+o+late+(ov?"":navSVG(s,k))+rt.top+top;
+ const rt=routeSVG(s,k),OE=document.getElementById("o");OE.classList.toggle("routing",!!(R&&R.res));OE.innerHTML=rt.o+gatesSVG(s,k)+o+late+(ov?"":navSVG(s,k))+(typeof tripSVG==="function"?tripSVG(s,k):"")+rt.top+top;
 }
 function tapCluster(idx){if(moved>=8)return;selMk=null;openC=idx;sel=null;openG=null;showCluster(CL[idx]);drawOv()}
 function zoomTo(xs,ys,minW=260){const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);const w=Math.max(minW,(x1-x0)*1.8),h=Math.max(minW,(y1-y0)*1.8);vb=[(x0+x1)/2-w/2,(y0+y1)/2-h/2,w,h];setVB()}
