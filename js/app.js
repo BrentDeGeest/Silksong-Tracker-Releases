@@ -143,7 +143,28 @@ const glyph=(k,x,y,s=.58,c="#fff")=>`<g transform="translate(${x-12*s},${y-12*s}
 
 // ---------- map / pan-zoom ----------
 const svg=document.getElementById("map");
+// which area each block of the map belongs to (data/area-shapes.js, made by tools/build_area_shapes.py)
+let ASH=null;
+function ashape(){if(ASH||typeof ASHAPE==="undefined")return ASH;const ix={};AREAS.forEach((a,i)=>ix[a.id]=i+1);
+ const map=ASHAPE.ids.map(id=>ix[id]||0),c=new Uint8Array(ASHAPE.w*ASHAPE.h);let p=0;
+ ASHAPE.rows.split("\n").forEach(row=>{row.replace(/([.A-Za-z])(\d*)/g,(_,ch,n)=>{const v=ch==="."?0:map[ch<="Z"?ch.charCodeAt(0)-65:ch.charCodeAt(0)-97+26],len=n?+n:1;c.fill(v,p,p+len);p+=len;return""})});
+ return ASH={k:ASHAPE.k,w:ASHAPE.w,h:ASHAPE.h,c}}
+const areaShapeAt=(x,y)=>{const A=ashape();if(!A)return null;const cx=Math.floor(x/A.k),cy=Math.floor(y/A.k);if(cx<0||cy<0||cx>=A.w||cy>=A.h)return null;const v=A.c[cy*A.w+cx];return v?AREAS[v-1]:null};
+// the middle of an area's rooms (for its name and "Unlock" button): the block nearest the average, so it's always on the area itself
+const AMID={};
+function areaMid(a){if(AMID[a.id])return AMID[a.id];const A=ashape(),r0=a.r.reduce((m,q)=>(q[2]-q[0])*(q[3]-q[1])>(m[2]-m[0])*(m[3]-m[1])?q:m);let res={x:(r0[0]+r0[2])/2,y:(r0[1]+r0[3])/2,w:r0[2]-r0[0],h:r0[3]-r0[1]};
+ if(A){const v=AREAS.indexOf(a)+1;let n=0,sx=0,sy=0,x0=1e9,y0=1e9,x1=0,y1=0;for(let i=0;i<A.c.length;i++)if(A.c[i]===v){const x=i%A.w,y=(i-x)/A.w;n++;sx+=x;sy+=y;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+  if(n>20){const mx=sx/n,my=sy/n;let b=-1,bd=1e18;for(let i=0;i<A.c.length;i++)if(A.c[i]===v){const x=i%A.w,y=(i-x)/A.w,d=(x-mx)*(x-mx)+(y-my)*(y-my);if(d<bd){bd=d;b=i}}
+   const bx=b%A.w,by=(b-bx)/A.w;res={x:(bx+.5)*A.k,y:(by+.5)*A.k,w:Math.min(res.w,(x1-x0+1)*A.k),h:Math.min(res.h,(y1-y0+1)*A.k)}}}
+ return AMID[a.id]=res}
+// the dark cover over areas not unlocked yet: it follows the rooms' real shapes, with a soft edge
+function fogShapeURL(){const A=ashape();if(!A)return null;
+ const c=document.createElement("canvas");c.width=A.w;c.height=A.h;const x=c.getContext("2d"),im=x.createImageData(A.w,A.h),d=im.data,open=AREAS.map(a=>!!S.areas[a.id]);
+ for(let i=0;i<A.c.length;i++){const v=A.c[i];if(v&&open[v-1])continue;const j=i*4;d[j]=8;d[j+1]=6;d[j+2]=5;d[j+3]=v?240:225}
+ x.putImageData(im,0,0);const o=document.createElement("canvas");o.width=A.w*2;o.height=A.h*2;const y=o.getContext("2d");
+ try{y.filter="blur(2px)"}catch(e){}y.imageSmoothingEnabled=true;y.drawImage(c,0,0,o.width,o.height);return o.toDataURL()}
 function fogURL(){
+ const sh=fogShapeURL();if(sh){const A=ashape(),f=document.getElementById("fogimg");f.setAttribute("width",A.w*A.k);f.setAttribute("height",A.h*A.k);return sh}
  const k=16,c=document.createElement("canvas");c.width=Math.ceil(W/k);c.height=Math.ceil(H/k);const x=c.getContext("2d");
  x.fillStyle="rgba(8,6,5,.93)";x.fillRect(0,0,c.width,c.height);
  x.globalCompositeOperation="destination-out";try{x.filter="blur(2px)"}catch(e){}
@@ -250,9 +271,9 @@ function areaSplit(n){if(n.length<=13)return[n];const a=n.indexOf(" & ");if(a>0)
  const sp=[...n.matchAll(/ /g)].map(m=>m.index);if(!sp.length)return[n];const mid=n.length/2,i=sp.reduce((b,x)=>Math.abs(x-mid)<Math.abs(b-mid)?x:b);return[n.slice(0,i),n.slice(i+1)]}
 function areaLabelsSVG(s,fresh){
  const t=Math.min(1,Math.max(0,(s-OV_S)/6)),PX=15+11*t,MIN=10; // name size on screen: 15px → 26px as you zoom out
- const L=AREAS.map(a=>{const r=a.r.reduce((m,q)=>(q[2]-q[0])*(q[3]-q[1])>(m[2]-m[0])*(m[3]-m[1])?q:m);
+ const L=AREAS.map(a=>{const M=areaMid(a);
   const its=IT.filter(i=>areaOf(i)===a.id&&COUNTED(i));
-  return{a,x:(r[0]+r[2])/2,y:(r[1]+r[3])/2,ln:areaSplit(a.n),n:its.length,d:its.filter(i=>S.done[i.id]).length,open:!!S.areas[a.id],px:PX,lv:0}});
+  return{a,x:M.x,y:M.y,ln:areaSplit(a.n),n:its.length,d:its.filter(i=>S.done[i.id]).length,open:!!S.areas[a.id],px:PX,lv:0}});
  // box in world units, centred on the area
  const box=l=>{const p=l.px*s,cw=l.n?Math.max(4,String(l.d).length+String(l.n).length+3)*.62*p*.8:0;
   const w=l.lv?cw:Math.max(cw,...l.ln.map(x=>x.length*.56*p)),h=(l.lv?0:l.ln.length*1.12*p)+(l.n?1.25*p:0);return[w/2+3*s,h/2+3*s]};
@@ -286,8 +307,8 @@ function drawOv(){
  drawFog();
  const s=sc(),k=R_PX/9*s;lastS=s;let L="",o="",top="";const ov=ovOn(s);
  if(ov)L=areaLabelsSVG(s,!ovWas);ovWas=ov;
- if(!ov)AREAS.filter(a=>!S.areas[a.id]).forEach(a=>{const r=a.r.reduce((m,q)=>(q[2]-q[0])*(q[3]-q[1])>(m[2]-m[0])*(m[3]-m[1])?q:m),cx=(r[0]+r[2])/2,cy=(r[1]+r[3])/2;
-  const fs=Math.max(38,Math.min(80,Math.min(r[2]-r[0],r[3]-r[1])*.16)),bw=fs*3.6,bh=fs*1.25,n=IT.filter(i=>areaOf(i)===a.id&&!REST(i)&&!QUEST(i)&&i.t!=="extra").length;
+ if(!ov)AREAS.filter(a=>!S.areas[a.id]).forEach(a=>{const M=areaMid(a),cx=M.x,cy=M.y;
+  const fs=Math.max(38,Math.min(80,Math.min(M.w,M.h)*.16)),bw=fs*3.6,bh=fs*1.25,n=IT.filter(i=>areaOf(i)===a.id&&!REST(i)&&!QUEST(i)&&i.t!=="extra").length;
   L+=`<g class="fogA"><text class="fogt" x="${cx}" y="${cy-fs*.25}" style="font-size:${fs}px">${a.n}</text>${n?`<text class="fogs" x="${cx}" y="${cy+fs*.45}" style="font-size:${fs*.42}px">${n} items to find</text>`:''}
   <g class="unl" onclick="unlockArea('${a.id}')"><rect x="${cx-bw/2}" y="${cy+fs*.75}" width="${bw}" height="${bh}" rx="${bh/2}"/><text x="${cx}" y="${cy+fs*.75+bh*.66}" style="font-size:${fs*.5}px">🔓 Unlock</text></g></g>`});
  document.getElementById("fogl").innerHTML=L;
@@ -774,7 +795,7 @@ function marksSVG(s,k){let o="",top="";if(!layerOn("mine")){if(selMk&&S.marks[se
 function setPlacing(v){placing=v;document.body.classList.toggle("placing",v);if(v){closeDrawer();document.getElementById("lpop").classList.remove("on")}}
 function togglePlacing(){setPlacing(!placing)}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(placing)setPlacing(false);else if(R&&!sheet.classList.contains("up"))clearRoute();else if(selMk){closeSheet();drawOv()}}});
-function areaAt(x,y){const a=AREAS.find(a=>a.r.some(r=>x>=r[0]&&x<=r[2]&&y>=r[1]&&y<=r[3]));return a?a.n:"Uncharted"}
+function areaAt(x,y){const s=areaShapeAt(x,y);if(s)return s.n;const a=AREAS.find(a=>a.r.some(r=>x>=r[0]&&x<=r[2]&&y>=r[1]&&y<=r[3]));return a?a.n:"Uncharted"}
 let lastDrop=0;
 function dropMarker(x,y){if(Date.now()-lastDrop<800)return;lastDrop=Date.now();const id="m"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);const L=S.mkLast||{};
  S.marks[id]={x:Math.round(x),y:Math.round(y),sym:L.sym||"star",col:L.col||MCOL[0][0],lbl:"",note:"",dn:0,t:Date.now()};
@@ -1048,7 +1069,7 @@ var pickHere=false;
 function startPickHere(){pickHere=true;setPlacing(false);document.body.classList.add("pickhere");closeDrawer();document.getElementById("lpop").classList.remove("on")}
 function cancelPickHere(){endPickHere();if(R&&R.res&&!R.res.needHere)showSteps();else{closeSheet();drawOv()}}
 function endPickHere(){pickHere=false;document.body.classList.remove("pickhere")}
-function hereFromMap(x,y){const c=navSnap([x,y]);if(x<0||y<0||x>W||y>H||navGrid()[c]!==1){toast('That spot is off the map. Tap on a room or corridor.');return}const q=cellXY(c);if(dist(q,[x,y])<60){x=q[0];y=q[1]}endPickHere();const a=areaIdAt(x,y);S.here={p:[Math.round(x),Math.round(y)],n:a?'A spot in '+aName(a):'The spot you picked',src:'map'};save(false);
+function hereFromMap(x,y){const c=navSnap([x,y]);if(x<0||y<0||x>W||y>H||navGrid()[c]!==1){toast('That spot is off the map. Tap on a room or corridor.');return}const q=cellXY(c);if(dist(q,[x,y])<60){x=q[0];y=q[1]}endPickHere();const a=(areaShapeAt(x,y)||{}).id||areaIdAt(x,y);S.here={p:[Math.round(x),Math.round(y)],n:a?'A spot in '+aName(a):'The spot you picked',src:'map'};save(false);
  if(R){calcRoute();fitRoute();drawOv();routeBar();showSteps()}else{if(sc_.querySelector('.herepick')){closeSheet();lastSheet=null;updReopen()}toast('📍 Got it. Directions start from there now.');drawOv()}}
 // Fast-travel stations you can use. Once you've ticked any station of a kind as unlocked, only ticked ones count.
 const waysAssumed=()=>{const U=IT.filter(wayOK);return["bellway","tube"].filter(t=>U.some(i=>i.t===t)&&!U.some(i=>i.t===t&&S.done[i.id]))};
