@@ -311,7 +311,8 @@ function drawOv(){
  const s=sc(),k=R_PX/9*s;lastS=s;let L="",o="",top="";const ov=ovOn(s);
  if(ov)L=areaLabelsSVG(s,!ovWas);ovWas=ov;
  if(!ov)AREAS.filter(a=>!S.areas[a.id]).forEach(a=>{const M=areaMid(a),cx=M.x,cy=M.y;
-  const fs=Math.max(38,Math.min(80,Math.min(M.w,M.h)*.16)),bw=fs*3.6,bh=fs*1.25,n=IT.filter(i=>areaOf(i)===a.id&&!REST(i)&&!QUEST(i)&&i.t!=="extra").length;
+  // never bigger than 36 px on screen, and the name always fits across the screen (phones, zoomed in)
+  const fs=Math.min(Math.max(38,Math.min(80,Math.min(M.w,M.h)*.16)),36*s,(svg.clientWidth||innerWidth)*.85*s/(a.n.length*.6)),bw=fs*3.6,bh=fs*1.25,n=IT.filter(i=>areaOf(i)===a.id&&!REST(i)&&!QUEST(i)&&i.t!=="extra").length;
   L+=`<g class="fogA"><text class="fogt" x="${cx}" y="${cy-fs*.25}" style="font-size:${fs}px">${a.n}</text>${n?`<text class="fogs" x="${cx}" y="${cy+fs*.45}" style="font-size:${fs*.42}px">${n} items to find</text>`:''}
   <g class="unl" onclick="unlockArea('${a.id}')"><rect x="${cx-bw/2}" y="${cy+fs*.75}" width="${bw}" height="${bh}" rx="${bh/2}"/><text x="${cx}" y="${cy+fs*.75+bh*.66}" style="font-size:${fs*.5}px">🔓 Unlock</text></g></g>`});
  document.getElementById("fogl").innerHTML=L;
