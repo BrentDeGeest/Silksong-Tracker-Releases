@@ -57,6 +57,8 @@ function restoreBackup(){const v=(document.getElementById("rin").value||"").trim
 
 const byId=id=>IT.find(i=>i.id===id);
 // Things you collect several of. A chip like "Craftmetal" lists every place to get one.
+// Another place that gives the same thing: the Simple Key from Sinner's Road counts as a Simple Key, beating the Last Judge as reaching Act 2.
+const REQSRC={widow:["needo"],act2:["judge"],skey:["skey","skeyR"]};
 const RES={craft:{n:"Craftmetal",f:i=>i.t==="craft",d:"Crafting material. Several tools cost one each."},
  berry:{n:"Mossberries",f:i=>i.gl==="berry",d:"Wish ingredient for the Moss Druid. Some grow in the open, others are carried by Aknids you have to kill."},
  pollip:{n:"Pollip Hearts",f:i=>i.n==="Pollip Heart",c:6,d:"Break the big bud on a purple Pollip flower. Greyroot wants 6."},
@@ -74,7 +76,8 @@ function objSt(w,j){const o=w.o[j],v=(S.wc||{})[w.id+"."+j];
  if(o.k==="r"){const n=Math.min(resDone(o.r),o.c);return{ok:n>=o.c,n,c:o.c}}
  if(o.k==="n"){const n=Math.min(+v||0,o.c);return{ok:n>=o.c,n,c:o.c}}
  return{ok:!!v}}
-const wDone=w=>!!(S.wd||{})[w.id]||(w.rw?w.rw.every(has):w.o.every((o,j)=>objSt(w,j).ok));
+const wDone=w=>{const v=(S.wd||{})[w.id];if(v===0)return false;if(v)return true;return wAuto(w)};
+const wAuto=w=>(w.rw?w.rw.every(has):w.o.every((o,j)=>objSt(w,j).ok));
 const wOpen=w=>(w.need||[]).every(req);
 const wSt=w=>wDone(w)?"done":wOpen(w)?"open":"locked";
 const wArea=w=>{const a=w.at;if(a.startsWith("A:"))return a.slice(2);if(a.startsWith("G:"))return G[a.slice(2)].a;return areaOf(byId(a))};
@@ -83,7 +86,7 @@ const wProg=w=>w.o.filter((o,j)=>objSt(w,j).ok).length;
 const wProgTxt=w=>{if(w.o.length===1&&w.o[0].c){const t=objSt(w,0);return t.n+'/'+t.c}return wProg(w)+'/'+w.o.length};
 const resItems=r=>IT.filter(RES[r].f);
 const resDone=r=>resItems(r).filter(i=>S.done[i.id]).length;
-const has=id=>{if(id.startsWith("O:"))return!!(S.open||{})[id.slice(2)];if(id.startsWith("R:")){const r=id.slice(2);return resDone(r)>=(RES[r].c||resItems(r).length)}if(id.startsWith("G:"))return gst(id.slice(2))==="done";if(id==="widow"&&S.done.needo)return true;if(id.startsWith("A:"))return!!S.areas[id.slice(2)];if(id.startsWith("W:")){const w=wById(id.slice(2));return!!w&&wDone(w)}return!!(S.have[id]||S.done[id])};
+const has=id=>{if(id.startsWith("O:"))return!!(S.open||{})[id.slice(2)];if(id.startsWith("R:")){const r=id.slice(2);return resDone(r)>=(RES[r].c||resItems(r).length)}if(id.startsWith("G:"))return gst(id.slice(2))==="done";if(id==="widow"&&S.done.needo)return true;if(id.startsWith("A:"))return!!S.areas[id.slice(2)];if(id.startsWith("W:")){const w=wById(id.slice(2));return!!w&&wDone(w)}if(S.have[id]||S.done[id])return true;return!!(REQSRC[id]&&REQSRC[id].some(x=>x!==id&&S.done[x]))};
 const req=n=>n.split("|").some(has);
 const nm1=id=>{if(id.startsWith("W:")){const w=wById(id.slice(2));return"Finish "+(w?w.n:"a wish")}if(id.startsWith("O:")){const g=GATES.find(x=>x.id===id.slice(2));return"Open "+(g?g.n:"it")+" from the other side"}if(id.startsWith("R:"))return RES[id.slice(2)].n;if(id.startsWith("G:"))return G[id.slice(2)].n;if(id.startsWith("A:")){const a=AREAS.find(x=>x.id===id.slice(2));return"Reach "+(a?a.n:id)}const p=[...PW,...KEYS,...FLAGS].find(p=>p[0]===id);if(p)return p[1];const i=byId(id);return i?(i.t==="boss"?"Beat ":"")+i.n:id};
 const nm=id=>id.split("|").map(nm1).join(" or ");
@@ -372,6 +375,7 @@ function wObjRow(w,j){const o=w.o[j],st=objSt(w,j),key=w.id+"."+j;let ctl="",go=
 function wSet(key,v,max){S.wc=S.wc||{};v=Math.max(0,Math.min(+v||0,max));if(v)S.wc[key]=v;else delete S.wc[key];save();refresh()}
 function setWish(id,v){const w=wById(id);S.wd=S.wd||{};if(v)S.wd[id]=1;else delete S.wd[id];
  if(w.rw)w.rw.forEach(r=>{if(byId(r)){S.done[r]=!!v;if(!v)delete S.have[r]}else S.have[r]=!!v});
+ if(!v&&wAuto(w))S.wd[id]=0; // every step is ticked but you undid it: keep it on your list
  save();toast(v?(w.rw?"Wish done. Reward marked as collected.":"Wish done."):"Wish back on your list.");refresh()}
 function showWish(id){const w=wById(id),s=wSt(w),miss=(w.need||[]).filter(n=>!req(n));sel=null;openG=null;selMk=null;gFrom=null;
  const giv=w.at.startsWith("A:")?`moveToArea('${w.at.slice(2)}')`:w.at.startsWith("G:")?`gFrom='${w.id}';moveToGroup('${w.at.slice(2)}')`:`moveTo('${w.at}','W:${w.id}')`;
@@ -406,7 +410,6 @@ function reqChips(list,from){return list.map(n=>`<button class="req ${req(n)?'ok
 const cntTxt=n=>{if(!n.startsWith("R:"))return"";const r=n.slice(2),c=RES[r].c||resItems(r).length;return ` ${Math.min(resDone(r),c)}/${c}`};
 function useChips(list,from){return list.map(n=>`<button class="req use ${has(n)?'ok':''}" onclick="showReq('${n}','${from||''}')" aria-label="Where to get ${nm(n)}">${has(n)?'✓ ':''}${nm(n)}${cntTxt(n)} <span class="ri">ⓘ</span></button>`).join("")}
 // ---------- "where do I get this?" ----------
-const REQSRC={widow:["needo"],act2:["judge"],skey:["skey","skeyR"]};
 const srcOf=n=>{if(n.startsWith("A:")||n.startsWith("G:"))return[];if(n.startsWith("R:"))return resItems(n.slice(2)).map(i=>i.id);return REQSRC[n]||(byId(n)?[n]:[])};
 let flash=null,flashT=null;
 function backBtn(from){if(!from)return"";if(from.startsWith("W:")){const w=wById(from.slice(2));return w?`<button class="back" onclick="showWish('${w.id}')">‹ Back to ${w.n}</button>`:""}const g=from.startsWith("G:");const lbl=g?G[from.slice(2)].n:(byId(from)||{}).n;return `<button class="back" onclick="${g?`openG='${from.slice(2)}';showGroup('${from.slice(2)}')`:`sel='${from}';showItem('${from}')`};drawOv()">‹ Back to ${lbl}</button>`}
@@ -430,7 +433,9 @@ function showReq(need,from){
  });
  sc_.innerHTML=h;sheet.classList.add("up");sheet.scrollTop=0;
 }
-function markHave(n,id,v){if(PW.some(p=>p[0]===n)||KEYS.some(p=>p[0]===n)||FLAGS.some(p=>p[0]===n)){setPw(n,!!v)}else{S.done[id]=!!v;save();refresh()}}
+function markHave(n,id,v){const flag=[...PW,...KEYS,...FLAGS].some(p=>p[0]===n),isFlag=FLAGS.some(p=>p[0]===n);
+ if(id!==n&&byId(id)&&!(v&&isFlag)){if(v)S.done[id]=true;else{delete S.done[id];if(flag&&!byId(n))delete S.have[n]}save();refresh();return}
+ if(flag)setPw(n,!!v);else{S.done[id]=!!v;save();refresh()}}
 // keep=1: the indicator stays on the target for as long as its card is open (pulses for 5s, then sits still).
 function startFlash(key,x,y,keep){flash={key,x,y,keep:!!keep};clearTimeout(flashT);flashT=setTimeout(()=>{if(!flash)return;if(flash.keep)flash.calm=1;else flash=null;drawOv()},5000)}
 function flashAlive(){if(!flash||!flash.keep)return;const k=flash.key,up=sheet.classList.contains("up");
@@ -700,8 +705,8 @@ function renderDrawer(){
 }
 function setAllAreas(v){if(!v&&!confirm("Cover every area in fog again? Your collected items are kept."))return;AREAS.forEach(a=>S.areas[a.id]=v?1:0);save();refresh()}
 function resetArea(id){const a=AREAS.find(x=>x.id===id);if(!confirm("Reset all collected items in "+a.n+"?"))return;IT.filter(i=>areaOf(i)===id).forEach(i=>{delete S.done[i.id];delete S.alt[i.id]});save();refresh()}
-function resetItems(){if(!confirm("Uncheck every collected item? Abilities and areas stay as they are."))return;const keep=new Set(PW.map(p=>p[0]).concat(KEYS.map(k=>k[0])));Object.keys(S.done).forEach(k=>{if(!keep.has(k))delete S.done[k]});S.alt={};save();refresh()}
-function resetAbilities(){if(!confirm("Clear all abilities, keys and story progress?"))return;S.have={};PW.concat(KEYS).forEach(p=>delete S.done[p[0]]);save();refresh()}
+function resetItems(){if(!confirm("Uncheck every collected item and wish? Abilities and areas stay as they are."))return;const keep=new Set(PW.map(p=>p[0]).concat(KEYS.map(k=>k[0])));Object.keys(S.done).forEach(k=>{if(!keep.has(k))delete S.done[k]});S.alt={};S.wd={};S.wc={};save();refresh()}
+function resetAbilities(){if(!confirm("Clear all abilities, keys and story progress? This also unticks the story bosses and Bellshrines."))return;S.have={};PW.concat(KEYS).forEach(p=>delete S.done[p[0]]);STORY.forEach(s=>{if(s.k)delete S.done[s.k]});SHR.forEach(x=>{if(x.b)delete S.done[x.b]});S.story={};storyOpen=null;save();refresh()}
 function resetPins(){if(!confirm("Put all moved pins back to their default spots?"))return;S.pos={};save();refresh()}
 function resetAll(){if(!confirm("Reset EVERYTHING on this device: items, abilities, areas and pins? Your own markers are kept."))return;try{localStorage.removeItem("ss5");localStorage.removeItem("bb4")}catch(e){}S={done:{},have:{},alt:{},pos:{},areas:{},hideDone:false,marks:S.marks||{}};DEF_AREAS.forEach(a=>S.areas[a]=1);save();fogKey="";refresh()}
 const gLayer=g=>{const W=WSEC.find(w=>w.f&&w.f(g));return"g_"+(W?W.k:"lock")};
@@ -733,12 +738,12 @@ function toggleLayers(){const p=document.getElementById("lpop");if(p.classList.t
 const SS=()=>S.story||(S.story={});
 const areaRest=a=>IT.some(i=>areaOf(i)===a&&REST(i)&&S.done[i.id]);
 const SHR=[
- {id:"marrow",n:"The Marrow",go:"bellb",h:"Right after the Bell Beast. Needed before Swift Step."},
+ {id:"marrow",n:"The Marrow",b:"b_mw2",go:"b_mw2",h:"Right after the Bell Beast. Needed before Swift Step."},
  {id:"dd",n:"Deep Docks",b:"b_dd3",go:"lace",h:"On the right of Lace's arena, after beating her."},
  {id:"grey",n:"Greymoor (Craw Lake)",b:"b_gm1",go:"b_gm1",h:"Beat the watermound gauntlet, hit the balloon lever and ride the balloons up."},
  {id:"shell",n:"Shellwood",b:"b_sw3",go:"b_sw3",h:"Upper west Shellwood, just left of the Bellway. Climb the lift shaft at the west end of the lower road (Cling Grip)."},
  {id:"bell",n:"Bellhart",b:"b_bh2",go:"needo",h:"In the room where you fight Widow."}];
-const shrOn=s=>!!(SS()["sh_"+s.id]||(s.b&&S.done[s.b])||(s.id==="marrow"&&has("swift")));
+const shrOn=s=>{const v=SS()["sh_"+s.id];if(s.b&&S.done[s.b])return true;if(v===0)return false;return!!(v||(s.id==="marrow"&&has("swift")))};
 let storyOpen=null;
 function storyState(){const d=new Array(STORY.length).fill(false);let later=false;
  for(let i=STORY.length-1;i>=0;i--){const s=STORY[i],own=!!(SS()[s.id]||s.chk());d[i]=own||later;if(own&&!s.noc)later=true;}
@@ -751,7 +756,7 @@ function storyRoute(r,i,open){const ok=r.need.every(req),it=!r.go.includes(":")&
  <ol class="ssteps">${r.s.map(t=>`<li>${t}</li>`).join("")}</ol>${r.note?`<div class="snote">${r.note}</div>`:''}
  <div class="acts"><button class="sec" onclick="storyGo('${r.go}')">📍 Show on map</button>${it&&!S.done[it.id]?`<button class="prim" onclick="listWay('${it.id}')">🧭 Show the way</button>`:''}</div></details>`}
 function storyBells(){return `<div class="sbells">${SHR.map(s=>{const on=shrOn(s);return `<label class="tg"><input type="checkbox" ${on?'checked':''} onchange="setShr('${s.id}',this.checked)"><span><b>${s.n}</b><br><small>${s.h}</small></span><button class="rs" aria-label="Show ${s.n} Bellshrine on the map" onclick="event.preventDefault();storyGo('${s.go}')">📍</button></label>`}).join("")}</div>`}
-function setShr(id,v){const s=SHR.find(x=>x.id===id);SS()["sh_"+id]=v?1:0;if(!v)delete SS()["sh_"+id];if(s.b){S.done[s.b]=!!v;if(!v)delete S.done[s.b]}save();refresh()}
+function setShr(id,v){const s=SHR.find(x=>x.id===id);SS()["sh_"+id]=v?1:0;if(s.b){S.done[s.b]=!!v;if(!v)delete S.done[s.b]}save();refresh()}
 function storyBody(s){const ok=s.routes?s.routes.map(r=>r.need.every(req)):[],best=ok[0]?0:ok.indexOf(true);
  return `<p class="swhy">${s.why}</p>${s.bells?storyBells():s.routes.map((r,i)=>storyRoute(r,i,i===(best<0?0:best))).join("")}${s.opt?`<div class="sopt">💡 ${s.opt}</div>`:''}`}
 function storyTab(){const d=storyState(),cur=d.indexOf(false),n=d.filter(Boolean).length;
@@ -1419,7 +1424,7 @@ function navSVG(s,k){let o="";
 
 function refresh(){
  if(R){calcRoute();routeBar()}
- const pool=IT.filter(cnt),d=pool.filter(i=>S.done[i.id]).length,g=pool.filter(i=>st(i)==="green").length;
+ const pool=IT.filter(cnt),d=pool.filter(i=>S.done[i.id]).length,g=pool.filter(i=>sk(i)==="avail").length;
  document.getElementById("prog").textContent=`${d} / ${pool.length} collected`;
  document.getElementById("pbar").style.width=(pool.length?d/pool.length*100:0)+"%";
  document.getElementById("avail").textContent=`● ${g} available`;
