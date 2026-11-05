@@ -1,5 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
+<!-- Safety net: the page may only load its own files, talk to GitHub (updates) and Google Forms (reports), and never load code from elsewhere. Add an address here if the app starts using a new service. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://github.com https://*.githubusercontent.com; font-src 'self' data:; connect-src 'self' https://api.github.com https://github.com https://*.githubusercontent.com https://docs.google.com; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Silksong Map Tracker</title>
 <link rel="stylesheet" href="css/app.css">
@@ -30,7 +32,7 @@
    (V3, V4, ...) on github.com/BrentDeGeest/Silksong-Tracker-Releases.
    No need to edit APP_VERSION by hand.
    Phones on an older version offer the update on their next start. */
-const APP_VERSION="43";
+const APP_VERSION="44";
 const UPDATE_REPO="BrentDeGeest/Silksong-Tracker-Releases";
 // The ❤️ Support button (main menu, Options, Helper). Empty = no button anywhere. Everything in the app stays free.
 const DONATE_URL="";
@@ -71,7 +73,7 @@ const BOOT=(function(){
    .then(r=>r.ok?r.json():null)
    .then(j=>{
     if(!j||!j.tag_name||!newer(j.tag_name,APP_VERSION))return done(null);
-    const apk=(j.assets||[]).find(a=>/\.apk$/i.test(a.name));
+    const apk=(j.assets||[]).find(a=>/\.apk$/i.test(a.name)&&relUrl(a.browser_download_url));
     done({ver:parts(j.tag_name).join("."),notes:(j.body||"").trim(),shots:shotsOf(j),
      url:apk?apk.browser_download_url:"https://github.com/"+UPDATE_REPO+"/releases/latest/download/app-debug.apk"});
    })
@@ -81,7 +83,9 @@ const BOOT=(function(){
 
  function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
  // Screenshots are image files attached to the release; their label (or file name) is the caption.
- function shotsOf(j){return (j.assets||[]).filter(a=>/\.(png|jpe?g|webp)$/i.test(a.name)).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}))
+ // Downloads (the APK, screenshots) are only ever taken from this app's own releases on GitHub, never from another address.
+ function relUrl(u){return typeof u==="string"&&u.toLowerCase().startsWith(("https://github.com/"+UPDATE_REPO+"/releases/download/").toLowerCase())&&!/[\s"'<>]/.test(u)}
+ function shotsOf(j){return (j.assets||[]).filter(a=>/\.(png|jpe?g|webp)$/i.test(a.name)&&relUrl(a.browser_download_url)).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}))
   .map(a=>({url:a.browser_download_url,cap:a.label||a.name.replace(/\.[^.]+$/,"").replace(/^\d+[\s._-]*/,"").replace(/[_-]+/g," ")}))}
  // Release notes: the first line is the title (an emoji at its start becomes the big icon),
  // lines starting with "-" are short points, everything else is a sentence of explanation.
@@ -144,7 +148,7 @@ const BOOT=(function(){
  // "Check for updates" from Settings or the Helper, without restarting the app
  function latest(){return fetch("https://api.github.com/repos/"+UPDATE_REPO+"/releases/latest",{headers:{Accept:"application/vnd.github+json"},cache:"no-store"}).then(r=>r.ok?r.json():null).then(j=>{
    if(!j||!j.tag_name)return{err:1};if(!newer(j.tag_name,APP_VERSION))return{none:1,ver:parts(j.tag_name).join(".")};
-   const apk=(j.assets||[]).find(a=>/\.apk$/i.test(a.name));
+   const apk=(j.assets||[]).find(a=>/\.apk$/i.test(a.name)&&relUrl(a.browser_download_url));
    return{ver:parts(j.tag_name).join("."),notes:(j.body||"").trim(),shots:shotsOf(j),url:apk?apk.browser_download_url:"https://github.com/"+UPDATE_REPO+"/releases/latest/download/app-debug.apk"}}).catch(()=>({err:1}))}
  function msgBox(icon,title,text){$("ubox").innerHTML=`<div class="uhero"><div class="uic">${icon}</div><h2 id="updt">${title}</h2><p class="uv">${text}</p></div><div class="ubtns"><button class="upri" id="uok">OK</button></div>`;$("upd").classList.add("on");$("uok").onclick=()=>$("upd").classList.remove("on")}
  function checkUpdate(){

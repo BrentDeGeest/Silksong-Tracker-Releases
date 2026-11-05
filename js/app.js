@@ -14,7 +14,32 @@ const FLAGS=[["widow","Beat Widow (Bellhart freed)"],["rebirth","Finished Greyro
 
 // ---------- state ----------
 let S={done:{},have:{},alt:{},pos:{},areas:null,hideDone:false,marks:{}};
-try{const raw=localStorage.getItem("ss5");if(raw)Object.assign(S,JSON.parse(raw));else{const o=JSON.parse(localStorage.getItem("bb4")||"{}");if(o.done)S.done=o.done;if(o.have)S.have=o.have;if(o.alt)S.alt=o.alt;}}catch(e){}
+// Saved progress can come from a backup code someone shared, so it is never trusted as it is: cleanState() keeps only
+// the shapes the app uses (ids, numbers, short texts) and drops anything else, so a crafted code can't run code or break the page.
+const SAFE_ID=/^[\w.:~>\- ]{1,80}$/;
+function cleanState(o){
+ if(!o||typeof o!=="object"||Array.isArray(o))return null;
+ const isObj=v=>v&&typeof v==="object"&&!Array.isArray(v),num=v=>typeof v==="number"&&isFinite(v);
+ const plain=(v,n)=>typeof v==="string"?v.replace(/[\u0000-\u001f]/g," ").slice(0,n):"";
+ const flags=v=>{const r={};if(isObj(v))Object.keys(v).slice(0,5000).forEach(k=>{if(!SAFE_ID.test(k))return;const x=v[k];
+  if(num(x)||typeof x==="boolean")r[k]=x;else if(typeof x==="string"&&SAFE_ID.test(x))r[k]=x});return r};
+ const pt=v=>Array.isArray(v)&&v.length===2&&num(v[0])&&num(v[1])?[Math.round(v[0]),Math.round(v[1])]:null;
+ const out={};
+ Object.keys(o).forEach(k=>{const v=o[k];if(v==null||!SAFE_ID.test(k))return;
+  if(k==="pos"){const r={};if(isObj(v))Object.keys(v).forEach(id=>{const p=pt(v[id]);if(p&&SAFE_ID.test(id))r[id]=p});out.pos=r}
+  else if(k==="marks"){const r={};if(isObj(v))Object.keys(v).slice(0,500).forEach(id=>{const m=v[id];if(!isObj(m)||!/^[\w-]{1,40}$/.test(id)||!num(m.x)||!num(m.y))return;
+   r[id]={x:Math.round(m.x),y:Math.round(m.y),sym:/^\w{1,16}$/.test(m.sym)?m.sym:"star",col:/^#[0-9a-fA-F]{3,8}$/.test(m.col)?m.col:"#e03131",
+    lbl:plain(m.lbl,40),note:plain(m.note,400),dn:m.dn?1:0,t:num(m.t)?m.t:Date.now()}});out.marks=r}
+  else if(k==="trip"){if(Array.isArray(v))out.trip=v.filter(x=>typeof x==="string"&&SAFE_ID.test(x)).slice(0,300)}
+  else if(k==="here"){if(!isObj(v))return;const h={};if(typeof v.id==="string"&&SAFE_ID.test(v.id))h.id=v.id;if(typeof v.src==="string"&&SAFE_ID.test(v.src))h.src=v.src;
+   const p=pt(v.p);if(p){h.p=p;h.n=plain(v.n,80).replace(/'/g,"\u2019").replace(/[<>&"`\\]/g,"")}if(h.id||h.p)out.here=h}
+  else if(k==="set"||k==="mkLast"){const r={};if(isObj(v))Object.keys(v).forEach(n=>{const x=v[n];if(!/^\w{1,20}$/.test(n))return;
+   if(num(x)||typeof x==="boolean")r[n]=x;else if(typeof x==="string"&&/^[\w.#-]{0,40}$/.test(x))r[n]=x});out[k]=r}
+  else if(isObj(v))out[k]=flags(v);
+  else if(num(v)||typeof v==="boolean")out[k]=v;
+  else if(typeof v==="string"&&SAFE_ID.test(v))out[k]=v});
+ return out}
+try{const raw=localStorage.getItem("ss5");if(raw)Object.assign(S,cleanState(JSON.parse(raw))||{});else{const o=cleanState(JSON.parse(localStorage.getItem("bb4")||"{}"))||{};if(o.done)S.done=o.done;if(o.have)S.have=o.have;if(o.alt)S.alt=o.alt;}}catch(e){}
 if(!S.areas){let returning=!!(Object.keys(S.done).length||Object.keys(S.have).length);try{if(localStorage.getItem("ss5"))returning=true}catch(e){}S.areas={};(returning?ROUTE:DEF_AREAS).forEach(a=>S.areas[a]=1);S._init=1}
 // Progress is keyed by item id. Item ids are kept stable across app updates so saved progress always carries over.
 if(!S.marks)S.marks={};
@@ -44,7 +69,7 @@ function syncText(){return sync==="cloud"?"☁️ Synced to your Claude account.
  const id=await user.id();if(!id)return;
  const ref=db.doc("data/users/"+id+"/progress");const snap=await ref.get();cloudRef=ref;sync="cloud";
  const hasLocal=Object.keys(S.done).length||Object.keys(S.have).length;
- if(snap.exists){const d=snap.data()||{};let remote=null;try{remote=JSON.parse(d.s)}catch(e){}
+ if(snap.exists){const d=snap.data()||{};let remote=null;try{remote=cleanState(JSON.parse(d.s))}catch(e){}
   if(remote&&(remote.t||0)>=(S.t||0)){S=Object.assign({done:{},have:{},alt:{},pos:{},areas:{},hideDone:false,marks:{}},remote);migCit();localSave();fogKey="";refresh()}
   else if(hasLocal){cloudDirty=true;pushCloud()}}
  else if(hasLocal){cloudDirty=true;pushCloud()}
@@ -53,7 +78,7 @@ function syncText(){return sync==="cloud"?"☁️ Synced to your Claude account.
 // ---------- backup codes ----------
 function backupCode(){return btoa(unescape(encodeURIComponent(JSON.stringify(S))))}
 function copyBackup(){const c=backupCode();try{navigator.clipboard.writeText(c)}catch(e){}document.getElementById("bk").innerHTML=`<textarea readonly onclick="this.select()">${c}</textarea><small>Copied. Paste it somewhere safe, or into "Restore" on another device.</small>`}
-function restoreBackup(){const v=(document.getElementById("rin").value||"").trim();if(!v)return;try{const o=JSON.parse(decodeURIComponent(escape(atob(v))));if(!o||typeof o.done!=="object")throw 0;if(!confirm("Replace your current progress with this backup?"))return;S=Object.assign({done:{},have:{},alt:{},pos:{},areas:{},hideDone:false,marks:{}},o);migCit();save();fogKey="";refresh();alert("Progress restored.")}catch(e){alert("That code doesn't look right. Copy the whole code and try again.")}}
+function restoreBackup(){const v=(document.getElementById("rin").value||"").replace(/\s+/g,"");if(!v)return;try{if(v.length>3e6)throw 0;const raw=JSON.parse(decodeURIComponent(escape(atob(v))));if(!raw||typeof raw.done!=="object"||!raw.done)throw 0;const o=cleanState(raw);if(!confirm("Replace your current progress with this backup?"))return;S=Object.assign({done:{},have:{},alt:{},pos:{},areas:{},hideDone:false,marks:{}},o);migCit();save();fogKey="";refresh();alert("Progress restored.")}catch(e){alert("That code doesn't look right. Copy the whole code and try again.")}}
 
 const byId=id=>IT.find(i=>i.id===id);
 // Things you collect several of. A chip like "Craftmetal" lists every place to get one.
@@ -1521,6 +1546,7 @@ function renderSettings(){const z=SET(),B=document.getElementById("setB");if(!B)
   <p class="note">Tip: Android's back button closes the open panel first, so you won't leave the app by accident.</p>`;
  h+=`<h3 id="set-update">Updates</h3><div class="scard"><b>Version ${typeof APP_VERSION!=="undefined"?APP_VERSION:"?"}</b><p>${BOOT.isApp()?"The app checks for updates every time it starts. You can also check right now.":"The web version always runs the newest version."}</p>
   <button class="btn" style="font-weight:700" onclick="BOOT.checkUpdate()">🔄 Check for updates</button><button class="btn" onclick="BOOT.openLog()">📜 Update log: what changed in every version</button></div>`;
+ h+=`<p class="note" style="margin:18px 4px 4px">🔒 Privacy: your progress stays on this device. No accounts, ads or tracking. The app only asks GitHub if there is an update, and a report leaves the app only when you send one, with your app version, the abilities you ticked and a random install number (no name or email).</p>`;
  h+=`<p class="note" style="margin:18px 4px 4px">Unofficial fan-made app, free for everyone. Not made by or connected to Team Cherry. Hollow Knight and Hollow Knight: Silksong are trademarks of Team Cherry. Game facts and pictures come from the community wiki at hollowknight.wiki.</p>`;
  if(DONATE_URL)h+=`<h3 id="set-support">Support</h3><div class="scard"><b>❤️ Like the app?</b><p>It is free and stays free: no ads, nothing to buy. If you want to say thanks, you can leave a small donation. It helps keep it going.</p><button class="btn" style="font-weight:700" onclick="openDonate()">❤️ Support the app</button></div>`;
  B.innerHTML=h;if(sv)sv.scrollTop=top}

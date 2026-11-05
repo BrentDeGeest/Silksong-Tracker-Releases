@@ -1,7 +1,7 @@
 // Offline support for the website version (not used in the Android app or when the page is opened from disk).
 // Pages, code and data: the newest from the internet when online, the saved copy when offline.
 // Pictures: the saved copy first (they rarely change), fetched once and kept.
-const CACHE = "silksong-map-v43";
+const CACHE = "silksong-map-v44";
 const CORE = ["./", "index.html", "css/app.css", "manifest.webmanifest", "img/map.jpg", "img/icons/icon-192.png",
   "js/pics.js", "js/report.js", "js/tips.js", "js/app.js", "js/trip.js", "js/helper.js",
   "data/areas.js", "data/groups.js", "data/items.js", "data/wishes.js", "data/story.js", "data/routes.js", "data/nav-grid.js",
