@@ -25,6 +25,13 @@ Free for everyone. No account, no ads, nothing to buy.
 
 Use the ⚠ button on any card in the app. Every report is read.
 
+## Privacy
+
+- Your progress is saved on your own device. There are no accounts, ads or tracking.
+- The app asks GitHub if there is a new version. That is the only thing it does online by itself.
+- A bug report or idea leaves the app only when you send it. It includes your message, the app version, the abilities you ticked and a random install number, never your name or email. Please don't put personal details in the message.
+- A backup code holds only your progress, and restoring one replaces yours, so only restore codes you trust.
+
 ---
 
 *Unofficial fan-made app. Not made by or connected to Team Cherry. Hollow Knight and Hollow Knight: Silksong are trademarks of Team Cherry. Game facts and pictures come from the community wiki at [hollowknight.wiki](https://hollowknight.wiki).*
